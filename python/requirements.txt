@@ -1,0 +1,11 @@
+# pip install -r python/requirements.txt
+# 只要 pygame 一个第三方库，网络和 JSON 用的都是标准库。Python 3.8+。
+
+pygame>=2.1.0
+
+# pygame 自己不带中文字体，程序会在系统里找（Noto Sans CJK / 微软雅黑 /
+# PingFang / 文泉驿 等）。汉字显示成方块的话装一款：
+#   Debian/Ubuntu : sudo apt install fonts-noto-cjk
+#   Fedora        : sudo dnf install google-noto-sans-cjk-fonts
+#   Arch          : sudo pacman -S noto-fonts-cjk
+# Windows / macOS 自带，不用管。

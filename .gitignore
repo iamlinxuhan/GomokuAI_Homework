@@ -1,0 +1,7 @@
+# 构建产物
+cpp/build/
+python/__pycache__/
+*.pyc
+
+# 编辑器配置（里面有本机绝对路径）
+.vscode/
