@@ -195,8 +195,11 @@ class GomokuClient:
     def _receive_loop(self):
         buffer = b""
         while not self._stop_event.is_set():
+            sock = self._sock          # close() 随时会把它置成 None，先抓一份
+            if sock is None:
+                return
             try:
-                chunk = self._sock.recv(65536)
+                chunk = sock.recv(65536)
             except OSError as exc:
                 if not self._stop_event.is_set():
                     self._queue.put({"type": MSG_DISCONNECTED,
