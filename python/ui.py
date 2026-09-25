@@ -209,8 +209,12 @@ class GomokuApp:
     def _active_buttons(self):
         if self.state == "menu":
             return self.menu_buttons
-        # 结算浮层只盖住棋盘，右侧面板仍然能用（比如输棋后想悔棋）
-        return self.panel_buttons + self.over_buttons
+        # 结算浮层只盖住棋盘，右侧面板仍然能用（比如输棋后想悔棋）。
+        # 但浮层按钮必须等对局结束才生效：它画在棋盘正中，对局中虽然看不见，
+        # 判定却是开着的，点到就是重开或者直接退出。
+        if self.game_over:
+            return self.panel_buttons + self.over_buttons
+        return self.panel_buttons
 
     def _on_click(self, pos):
         for btn in self._active_buttons():
