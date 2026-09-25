@@ -10,8 +10,9 @@ import argparse
 import os
 import sys
 
-# 这样 `python python/main.py` 和 `python -m main` 都能跑
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# 这样 `python python/main.py` 和 `python -m main` 都能跑。打包后不需要。
+if not getattr(sys, "frozen", False):
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config  # noqa: E402
 

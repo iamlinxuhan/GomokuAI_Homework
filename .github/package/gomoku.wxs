@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MSI 安装包定义（WiX v5）。
+
+  用法：把本文件和待打包的整个目录（Gomoku.exe + _internal/）放在同一层，
+  然后 wix build -arch x64 -d Version=1.2.3 -ext WixToolset.Files.wixext -o out.msi gomoku.wxs
+
+  用 <Files Include="**"> 自动收割同目录下的所有文件，省掉 heat.exe 那一步；
+  因为 .wxs 本身也在这一层，得把它自己排除掉。
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package Name="五子棋" Manufacturer="iamlinxuhan"
+           Version="$(var.Version)"
+           UpgradeCode="B88EF37C-F209-42A2-9CD6-E8B5D49600B6"
+           Scope="perUser" Language="2052" Codepage="65001">
+
+    <SummaryInformation Description="五子棋人机对战" />
+    <MajorUpgrade DowngradeErrorMessage="已经装了更新的版本，请先从「应用和功能」里卸载。" />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- 装到 %LOCALAPPDATA%\Gomoku，不需要管理员权限 -->
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="Gomoku" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="SHORTCUTFOLDER" Name="五子棋" />
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="五子棋" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Files Include="**" Exclude="**\*.wxs" />
+    </ComponentGroup>
+  </Fragment>
+
+  <Fragment>
+    <Component Id="StartMenuShortcut" Directory="SHORTCUTFOLDER"
+               Guid="62A41EDE-070B-45DC-B2B8-8E1C00A3E62C">
+      <Shortcut Id="AppShortcut" Name="五子棋"
+                Target="[INSTALLFOLDER]Gomoku.exe" WorkingDirectory="INSTALLFOLDER" />
+      <RemoveFolder Id="RemoveShortcutFolder" On="uninstall" />
+      <!-- 组件得有个 keypath，注册表值是这类纯快捷方式组件最省事的落点 -->
+      <RegistryValue Root="HKCU" Key="Software\Gomoku" Name="installed"
+                     Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+  </Fragment>
+
+</Wix>

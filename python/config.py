@@ -13,8 +13,30 @@ PYTHON_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(PYTHON_DIR)
 CPP_DIR = os.path.join(PROJECT_ROOT, "cpp")
 
+FROZEN = getattr(sys, "frozen", False)
 IS_WINDOWS = os.name == "nt"
 SERVER_EXE_NAME = "gomoku_server.exe" if IS_WINDOWS else "gomoku_server"
+
+
+def bundled_dir():
+    """打包后随程序一起发出去的文件放在哪。
+
+    onefile 下是临时解压目录，onedir 下是 exe 旁边的 _internal。
+    没打包（直接跑源码）时就是项目根目录。
+    """
+    if FROZEN:
+        return getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
+    return PROJECT_ROOT
+
+
+def executable_dir():
+    """可执行文件自己所在的目录。onedir 绿色版里服务端就摆在这儿。
+
+    没打包时返回项目根目录，保持和之前一样的查找行为。
+    """
+    if FROZEN:
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return PROJECT_ROOT
 
 # 默认值要和 cpp/src/main.cpp 保持一致
 HOST = "127.0.0.1"
@@ -114,6 +136,13 @@ CJK_FONT_NAMES = (
 
 def find_cjk_font():
     """返回可用的中文字体路径，找不到就返回 None（汉字会显示成方块）。"""
+    # 打包时随包带了一份，先用它，免得目标机器没装中文字体
+    bundled = os.path.join(bundled_dir(), "fonts")
+    if os.path.isdir(bundled):
+        for name in sorted(os.listdir(bundled)):
+            if name.lower().endswith((".ttf", ".otf", ".ttc")):
+                return os.path.join(bundled, name)
+
     for path in CJK_FONT_CANDIDATES:
         if os.path.isfile(path):
             return path
@@ -147,18 +176,26 @@ def server_executable_candidates():
     names += ["gomoku_server", "gomoku_server.exe"] if IS_WINDOWS else ["gomoku_server.exe"]
 
     dirs = [
-        os.path.join(CPP_DIR, "build", "bin"),        # CMakeLists 指定的输出目录
-        os.path.join(CPP_DIR, "build"),               # 单配置生成器的默认位置
-        os.path.join(CPP_DIR, "build", "Release"),    # MSVC 多配置
+        # 打包后：ondir 绿色版放在 exe 旁边，onefile 放在解压目录里
+        executable_dir(),
+        bundled_dir(),
+        # 没打包时：CMake 的各个输出位置
+        os.path.join(CPP_DIR, "build", "bin"),
+        os.path.join(CPP_DIR, "build"),
+        os.path.join(CPP_DIR, "build", "Release"),
         os.path.join(CPP_DIR, "build", "Debug"),
         os.path.join(CPP_DIR, "build", "RelWithDebInfo"),
         CPP_DIR,
         PROJECT_ROOT,
     ]
 
+    seen = set()
     for directory in dirs:
         for name in names:
-            yield os.path.join(directory, name)
+            path = os.path.join(directory, name)
+            if path not in seen:
+                seen.add(path)
+                yield path
 
 
 def find_server_executable():
@@ -174,7 +211,16 @@ def find_server_executable():
     return None
 
 
-BUILD_HINT = f"""\
+if FROZEN:
+    # 打包发出去之后，用户手上没有源码，叫他去 cmake 没有意义
+    BUILD_HINT = f"""\
+程序自带的计算服务端没找到，这个安装包可能不完整，建议重新下载。
+
+也可以用环境变量指向一个现成的服务端：
+    {ENV_SERVER_EXE}=/path/to/{SERVER_EXE_NAME}
+"""
+else:
+    BUILD_HINT = f"""\
 找不到服务端可执行文件，先编译 C++ 部分：
 
     cd {CPP_DIR}

@@ -1,0 +1,412 @@
+name: 构建
+
+# 打个 v 开头的 tag 就自动构建并发布 Release；平时也可以在 Actions 页面手动点，
+# 手动触发时能只跑其中一个目标，省得六个平台全跑一遍。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 只构建指定目标
+        type: choice
+        default: all
+        options:
+          - all
+          - win-x64
+          - win-arm64
+          - linux-x64
+          - linux-arm64
+          - macos-x64
+          - macos-arm64
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    # push tag 时 github.event.inputs 是空的，这个条件就直接放行
+    if: ${{ github.event.inputs.target == '' || github.event.inputs.target == 'all' || github.event.inputs.target == matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: win-x64,      os: windows-latest,  family: windows, arch: x64,   icon: Gomoku.ico,  appimage: "" }
+          - { target: win-arm64,    os: windows-11-arm,  family: windows, arch: arm64, icon: Gomoku.ico,  appimage: "" }
+          - { target: linux-x64,    os: ubuntu-latest,   family: linux,   arch: x64,   icon: "",          appimage: x86_64 }
+          - { target: linux-arm64,  os: ubuntu-24.04-arm, family: linux, arch: arm64, icon: "",          appimage: aarch64 }
+          - { target: macos-x64,    os: macos-15-intel,  family: macos,   arch: x64,   icon: Gomoku.icns, appimage: "" }
+          - { target: macos-arm64,  os: macos-15,        family: macos,   arch: arm64, icon: Gomoku.icns, appimage: "" }
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 定版本号
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            v="${GITHUB_REF#refs/tags/}"
+            v="${v#v}"
+          else
+            v="0.0.0-dev.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "版本号 $v"
+
+      - name: 编译 C++ 服务端
+        run: |
+          cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build cpp/build --config Release --parallel
+
+      - name: 准备中文字体和图标
+        run: |
+          set -euo pipefail
+
+          # 服务端二进制的绝对路径。不能直接用 $PWD，Windows 的 Git Bash 给的是
+          # /d/a/... 这种 MSYS 路径，原生 Python 认不出来。
+          python - <<'PY' >> "$GITHUB_ENV"
+          import os
+          name = "gomoku_server.exe" if os.name == "nt" else "gomoku_server"
+          path = os.path.abspath(os.path.join("cpp", "build", "bin", name))
+          if not os.path.isfile(path):
+              raise SystemExit("没找到服务端二进制：" + path)
+          print("SERVER_BIN=" + path)
+          PY
+
+          # 随包带一份中文字体，免得目标机器没装 Noto CJK 就满屏方块
+          mkdir -p fonts
+          font=fonts/NotoSansSC-Regular.otf
+          for url in \
+            "https://cdn.jsdelivr.net/gh/notofonts/noto-cjk@main/Sans/SubsetOTF/SC/NotoSansSC-Regular.otf" \
+            "https://github.com/notofonts/noto-cjk/raw/main/Sans/SubsetOTF/SC/NotoSansSC-Regular.otf"
+          do
+            echo "下载字体：$url"
+            if curl -fsSL --retry 2 --retry-delay 3 --max-time 180 -o "$font" "$url"; then break; fi
+          done
+          size=$(wc -c < "$font" 2>/dev/null || echo 0)
+          if [[ "$size" -lt 1000000 ]]; then
+            echo "字体没下下来或者不完整（$size 字节）"; exit 1
+          fi
+          echo "字体 $size 字节"
+
+          python .github/package/make_icon.py icon
+
+          python - <<'PY' >> "$GITHUB_ENV"
+          import os
+          icon = os.environ.get("MATRIX_ICON")
+          for key, rel in (("GOMOKU_FONT", "fonts/NotoSansSC-Regular.otf"),
+                           ("GOMOKU_ICON", os.path.join("icon", icon) if icon else "")):
+              if not rel:
+                  continue
+              path = os.path.abspath(rel)
+              if os.path.isfile(path):
+                  print(f"{key}={path}")
+          PY
+        env:
+          MATRIX_ICON: ${{ matrix.icon }}
+
+      - name: 安装打包依赖
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller -r python/requirements.txt
+
+      - name: 打包 PyInstaller 单文件
+        env:
+          GOMOKU_ONEFILE: "1"
+        working-directory: python
+        run: |
+          set -euo pipefail
+          export GOMOKU_SERVER_BIN="$SERVER_BIN"
+          pyinstaller --clean --noconfirm \
+            --distpath ../dist/onefile --workpath ../build/onefile \
+            gomoku.spec
+          ls -la ../dist/onefile
+
+      - name: 打包 PyInstaller 目录（便携版）
+        working-directory: python
+        run: |
+          set -euo pipefail
+          export GOMOKU_SERVER_BIN="$SERVER_BIN"
+          pyinstaller --clean --noconfirm \
+            --distpath ../dist/dir --workpath ../build/dir \
+            gomoku.spec
+          ls -la ../dist/dir
+
+      # ---------- Windows ----------
+
+      - name: Windows · 单文件 + 绿色版
+        if: matrix.family == 'windows'
+        run: |
+          set -euo pipefail
+          ver='${{ steps.ver.outputs.version }}'
+          arch='${{ matrix.arch }}'
+          mkdir -p out
+          cp dist/onefile/Gomoku.exe "out/Gomoku-${ver}-windows-${arch}.exe"
+          python -c "
+          import shutil
+          shutil.make_archive('out/Gomoku-${ver}-windows-${arch}-portable', 'zip', 'dist/dir')
+          "
+          ls -la out
+
+      - name: Windows · MSI
+        if: matrix.family == 'windows'
+        run: |
+          set -euo pipefail
+          ver='${{ steps.ver.outputs.version }}'
+          arch='${{ matrix.arch }}'
+
+          dotnet tool install --global wix --version "5.*" || dotnet tool install --global wix
+          export PATH="$HOME/.dotnet/tools:$PATH"
+          wix extension add -g WixToolset.Files.wixext
+
+          # <Files Include="**"> 是按 .wxs 所在目录扫的，所以把 wxs 摆进待打包目录里
+          rm -rf staging && mkdir -p staging
+          cp -r dist/dir/Gomoku/. staging/
+          cp .github/package/gomoku.wxs staging/gomoku.wxs
+
+          wix build -arch "$arch" \
+            -d Version="$ver" \
+            -ext WixToolset.Files.wixext \
+            -o "out/Gomoku-${ver}-windows-${arch}.msi" \
+            staging/gomoku.wxs
+          ls -la out
+
+      - name: Windows · NSIS 安装包
+        if: matrix.family == 'windows'
+        run: |
+          set -euo pipefail
+          ver='${{ steps.ver.outputs.version }}'
+          arch='${{ matrix.arch }}'
+
+          makensis=$(command -v makensis || true)
+          if [[ -z "$makensis" && -x "/c/Program Files (x86)/NSIS/makensis.exe" ]]; then
+            makensis="/c/Program Files (x86)/NSIS/makensis.exe"
+          fi
+          if [[ -z "$makensis" ]]; then
+            choco install nsis -y --no-progress
+            makensis="/c/Program Files (x86)/NSIS/makensis.exe"
+          fi
+
+          # makensis 是原生程序，喂它 MSYS 路径它看不懂
+          stage=$(cygpath -w "$PWD/dist/dir/Gomoku")
+          outfile=$(cygpath -w "$PWD/out/Gomoku-${ver}-windows-${arch}-setup.exe")
+
+          "$makensis" -DSTAGE="$stage" -DVERSION="$ver" -DARCH="$arch" -DOUTFILE="$outfile" \
+            .github/package/gomoku.nsi
+          ls -la out
+
+      - name: Windows · Inno Setup 安装包
+        if: matrix.family == 'windows'
+        run: |
+          set -euo pipefail
+          ver='${{ steps.ver.outputs.version }}'
+          arch='${{ matrix.arch }}'
+
+          iscc="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          if [[ ! -x "$iscc" ]]; then
+            choco install innosetup -y --no-progress
+          fi
+          if [[ ! -x "$iscc" ]]; then
+            echo "没找到 ISCC.exe"; exit 1
+          fi
+
+          stage=$(cygpath -w "$PWD/dist/dir/Gomoku")
+          "$iscc" /DStage="$stage" /DVersion="$ver" /DArch="$arch" \
+            /O"$(cygpath -w "$PWD/out")" .github/package/gomoku.iss
+          ls -la out
+
+      # ---------- Linux ----------
+
+      - name: Linux · 安装打包工具
+        if: matrix.family == 'linux'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            desktop-file-utils squashfs-tools rpm
+          # deb / rpm 都交给 fpm 生成，比手写 control 文件省事
+          command -v gem >/dev/null || sudo apt-get install -y --no-install-recommends ruby
+          sudo gem install fpm --no-document
+
+      - name: Linux · 单文件 + 便携 tar.gz
+        if: matrix.family == 'linux'
+        run: |
+          set -euo pipefail
+          ver='${{ steps.ver.outputs.version }}'
+          arch='${{ matrix.arch }}'
+          mkdir -p out
+
+          cp dist/onefile/Gomoku "out/Gomoku-${ver}-linux-${arch}"
+          chmod +x "out/Gomoku-${ver}-linux-${arch}"
+          tar -C dist/dir -czf "out/Gomoku-${ver}-linux-${arch}-portable.tar.gz" Gomoku
+          ls -la out
+
+      - name: Linux · deb + rpm
+        if: matrix.family == 'linux'
+        run: |
+          set -euo pipefail
+          ver='${{ steps.ver.outputs.version }}'
+          arch='${{ matrix.arch }}'
+          case "$arch" in
+            x64)   deb_arch=amd64; rpm_arch=x86_64  ;;
+            arm64) deb_arch=arm64; rpm_arch=aarch64 ;;
+          esac
+
+          rm -rf pkgroot && mkdir -p pkgroot
+          cp -r dist/dir/Gomoku pkgroot/Gomoku
+
+          common=(
+            -s dir -n gomoku -v "$ver"
+            --prefix /opt/gomoku
+            --description "五子棋人机对战"
+            --url "https://github.com/iamlinxuhan/GomokuAI_Homework"
+            --license MIT --maintainer "iamlinxuhan <2276677131@qq.com>"
+            --depends libc6 --depends libx11-6 --depends libxext6 --depends libxrender1
+            --depends libsm6 --depends libice6 --depends libfontconfig1 --depends libfreetype6
+            -C "$PWD/pkgroot"
+            Gomoku
+            "$PWD/.github/package/gomoku.desktop=/usr/share/applications/gomoku.desktop"
+            "$PWD/icon/Gomoku.png=/usr/share/icons/hicolor/256x256/apps/gomoku.png"
+          )
+
+          fpm "${common[@]}" -t deb -a "$deb_arch" \
+            -p "out/Gomoku-${ver}-linux-${arch}.deb"
+          fpm "${common[@]}" -t rpm -a "$rpm_arch" \
+            -p "out/Gomoku-${ver}-linux-${arch}.rpm"
+          ls -la out
+
+      - name: Linux · AppImage
+        if: matrix.family == 'linux'
+        run: |
+          set -euo pipefail
+          ver='${{ steps.ver.outputs.version }}'
+          arch='${{ matrix.arch }}'
+          appimage_arch='${{ matrix.appimage }}'
+
+          appdir="$PWD/AppDir"
+          rm -rf "$appdir"
+          mkdir -p "$appdir/usr/bin"
+          # PyInstaller 的可执行文件和 _internal/ 必须保持相对位置，整个铺进去
+          cp -r dist/dir/Gomoku/. "$appdir/usr/bin/"
+
+          cp .github/package/AppRun "$appdir/AppRun"
+          chmod +x "$appdir/AppRun"
+          cp icon/Gomoku.png "$appdir/gomoku.png"
+          cp icon/Gomoku.png "$appdir/.DirIcon"
+
+          # AppImage 里的 Exec 必须是相对的，不能写 /opt/... 那个绝对路径
+          cat > "$appdir/gomoku.desktop" <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=五子棋
+          Name[en]=Gomoku
+          Comment=五子棋人机对战
+          Exec=Gomoku
+          Icon=gomoku
+          Terminal=false
+          Categories=Game;BoardGame;
+          EOF
+          desktop-file-validate "$appdir/gomoku.desktop"
+
+          tool="appimagetool-${appimage_arch}.AppImage"
+          for url in \
+            "https://github.com/AppImage/appimagetool/releases/download/continuous/${tool}" \
+            "https://github.com/AppImage/AppImageKit/releases/download/continuous/${tool}"
+          do
+            echo "下载 appimagetool：$url"
+            if curl -fsSL --retry 3 --max-time 300 -o "$tool" "$url"; then break; fi
+          done
+          chmod +x "$tool"
+          test -s "$tool" || { echo "appimagetool 没下下来"; exit 1; }
+
+          # 用解包模式跑，省得在容器里为 FUSE 折腾
+          APPIMAGE_EXTRACT_AND_RUN=1 ARCH="$appimage_arch" \
+            "./$tool" "$appdir" "out/Gomoku-${ver}-linux-${arch}.AppImage"
+          ls -la out
+
+      # ---------- macOS ----------
+
+      - name: macOS · 单文件 + .app 归档
+        if: matrix.family == 'macos'
+        run: |
+          set -euo pipefail
+          ver='${{ steps.ver.outputs.version }}'
+          arch='${{ matrix.arch }}'
+          mkdir -p out
+
+          cp dist/onefile/Gomoku "out/Gomoku-${ver}-macos-${arch}"
+          chmod +x "out/Gomoku-${ver}-macos-${arch}"
+
+          tar -C dist/dir -czf "out/Gomoku-${ver}-macos-${arch}-app.tar.gz" Gomoku.app
+          # ditto 才保得住 .app 里的符号链接和扩展属性，zip 命令会搞坏签名结构
+          ditto -c -k --keepParent dist/dir/Gomoku.app \
+            "out/Gomoku-${ver}-macos-${arch}.zip"
+          ls -la out
+
+      - name: macOS · dmg + pkg
+        if: matrix.family == 'macos'
+        run: |
+          set -euo pipefail
+          ver='${{ steps.ver.outputs.version }}'
+          arch='${{ matrix.arch }}'
+
+          rm -rf dmgroot && mkdir -p dmgroot
+          cp -r dist/dir/Gomoku.app dmgroot/
+          ln -s /Applications dmgroot/Applications
+          hdiutil create -volname "Gomoku" -srcfolder dmgroot -ov -format UDZO \
+            "out/Gomoku-${ver}-macos-${arch}.dmg"
+
+          pkgbuild --component dist/dir/Gomoku.app \
+            --install-location /Applications \
+            --identifier com.iamlinxuhan.gomoku \
+            --version "$ver" \
+            "out/Gomoku-${ver}-macos-${arch}.pkg"
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: out/*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: 发布 Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: 列出收集到的产物
+        run: ls -laR artifacts
+
+      - name: 创建 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --title "$TAG" --generate-notes
+          gh release upload "$TAG" artifacts/* --clobber

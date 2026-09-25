@@ -3,5 +3,15 @@ cpp/build/
 python/__pycache__/
 *.pyc
 
+# 打包过程中的中间目录（CI 上跑完就没了，本地复现时也别提交）
+dist/
+build/
+out/
+AppDir/
+fonts/
+icon/
+pkgroot/
+*.spec.bak
+
 # 编辑器配置（里面有本机绝对路径）
 .vscode/

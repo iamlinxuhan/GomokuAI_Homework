@@ -1,0 +1,6 @@
+#!/bin/sh
+# AppImage 的入口。AppDir 里程序本体放在 usr/bin/，PyInstaller 的 onedir
+# 产物必须整个目录待在一起（可执行文件和 _internal/ 的相对位置不能动），
+# 所以直接把整个 dist/Gomoku/ 铺进 usr/bin/。
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/bin/Gomoku" "$@"

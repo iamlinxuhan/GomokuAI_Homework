@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=五子棋
+Name[en]=Gomoku
+Comment=五子棋人机对战
+Comment[en]=Play Gomoku against the computer
+Exec=/opt/gomoku/Gomoku/Gomoku
+Icon=gomoku
+Terminal=false
+Categories=Game;BoardGame;
+Keywords=gomoku;five-in-a-row;五子棋;
+StartupNotify=true
