@@ -40,7 +40,19 @@ def executable_dir():
 
 # 默认值要和 cpp/src/main.cpp 保持一致
 HOST = "127.0.0.1"
-PORT = 8888
+PORT = 8888           # 端口池的起点，也是 --port 不指定时的取值
+PORT_POOL_SIZE = 15   # 8888 被占了就顺着 8889、8890…… 往下找，一共找这么多个
+
+
+def port_pool(base=None, size=None):
+    """从起点依次排开的候选端口。
+
+    机器上常有上一次没退干净的服务端、或者别的程序占着 8888，写死一个端口的话
+    bind 失败整个程序就起不来了，所以留一串备用的。
+    """
+    base = PORT if base is None else base
+    size = PORT_POOL_SIZE if size is None else size
+    return list(range(base, base + size))
 
 AUTO_START_SERVER = True      # 连不上时自动拉起 C++ 服务端
 SERVER_START_TIMEOUT = 15.0   # 等端口就绪的上限（秒）

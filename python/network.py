@@ -9,6 +9,7 @@ import os
 import queue
 import socket
 import subprocess
+import sys
 import threading
 import time
 
@@ -64,15 +65,56 @@ class ServerProcess:
                 pass
 
 
+def port_is_open(host, port, timeout=0.2):
+    """端口上有没有活着的监听者。
+
+    TIME_WAIT 里的旧连接不算占着：服务端 bind 时带了 SO_REUSEADDR，
+    这种情况它照样绑得上，所以这里用 connect 而不是 bind 来判断。
+    """
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def is_our_server(host, port, timeout=0.6):
+    """端口上跑的是不是我们的服务端。
+
+    光看「端口开着」不够：占着 8888 的完全可能是别的程序，那样连上去也是白连。
+    所以真发一条只读的 state 过去，回得出 JSON 状态的就认。
+    """
+    try:
+        with socket.create_connection((host, port), timeout=timeout) as sock:
+            sock.settimeout(timeout)
+            sock.sendall(b'{"type":"state"}\n')
+
+            buf = b""
+            while b"\n" not in buf:
+                chunk = sock.recv(4096)
+                if not chunk:
+                    return False
+                buf += chunk
+    except OSError:
+        return False
+
+    line = buf.split(b"\n", 1)[0].strip()
+    if not line:
+        return False
+    try:
+        msg = json.loads(line.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return False
+    return isinstance(msg, dict) and msg.get("type") == "state"
+
+
 def wait_for_port(host, port, timeout, proc=None):
     """等端口可连接；proc 中途退出就直接报错，不用干等到超时。"""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if proc is not None and proc.poll() is not None:
             raise ConnectionError(
-                f"服务端进程已退出（退出码 {proc.returncode}），"
-                f"检查一下端口 {port} 是不是被占用了"
-            )
+                f"服务端进程在 {host}:{port} 上启动失败（退出码 {proc.returncode}）")
         try:
             with socket.create_connection((host, port), timeout=0.5):
                 return True
@@ -189,43 +231,67 @@ class GomokuClient:
                 return messages
 
 
-def connect_or_start(host=config.HOST, port=config.PORT, verbose=False):
+def connect_or_start(host=config.HOST, port=None, verbose=False):
     """返回 (client, server)。
 
-    端口上已经有服务端就直接连，返回的 server 是 None（说明这个进程不归我们管）；
+    端口池里已经有服务端就直接连，返回的 server 是 None（说明这个进程不归我们管）；
     否则自己拉起可执行文件，退出时负责关掉。
+
+    端口是一个个顺延着试的：8888 被别的程序占着就换 8889，直到找出一个能用的，
+    免得端口一冲突整个程序就起不来。
     """
-    try:
-        with socket.create_connection((host, port), timeout=0.6):
-            pass
-    except OSError:
-        pass
-    else:
-        client = GomokuClient(host, port)
-        client.connect()
-        print(f"[信息] 已连接到正在运行的服务端 {host}:{port}")
-        return client, None
+    ports = config.port_pool(port)
+
+    for candidate in ports:
+        if is_our_server(host, candidate):
+            client = GomokuClient(host, candidate)
+            client.connect()
+            print(f"[信息] 已连接到正在运行的服务端 {host}:{candidate}")
+            return client, None
 
     if not config.AUTO_START_SERVER:
         raise ConnectionError(
-            f"连接 {host}:{port} 失败，而配置里关掉了自动启动服务端。\n"
+            f"{host} 的 {ports[0]}~{ports[-1]} 上没有正在运行的服务端，"
+            "而配置里关掉了自动启动服务端。\n"
             "请先手动运行服务端，或把 config.AUTO_START_SERVER 改成 True。")
 
     exe = config.find_server_executable()
     if exe is None:
         raise ConnectionError("找不到服务端可执行文件。\n\n" + config.BUILD_HINT)
 
-    server = ServerProcess(exe)
-    server.start(host, port, verbose=verbose)
-    print(f"[信息] 已启动服务端：{exe} (pid={server._proc.pid})")
+    last_error = None
+    for candidate in ports:
+        if port_is_open(host, candidate):
+            continue
 
-    if not wait_for_port(host, port, config.SERVER_START_TIMEOUT, proc=server._proc):
-        server.stop()
-        raise ConnectionError(
-            f"等了 {config.SERVER_START_TIMEOUT:.0f} 秒还没等到 {host}:{port} 监听。\n"
-            "多半是端口被占用了，改一下 python/config.py 里的 PORT。")
+        server = ServerProcess(exe)
+        server.start(host, candidate, verbose=verbose)
+        print(f"[信息] 已启动服务端：{exe} (pid={server._proc.pid}) 端口 {candidate}")
 
-    client = GomokuClient(host, port)
-    client.connect()
-    print(f"[信息] 已连接到服务端 {host}:{port}")
-    return client, server
+        try:
+            ready = wait_for_port(host, candidate, config.SERVER_START_TIMEOUT,
+                                  proc=server._proc)
+        except ConnectionError as exc:
+            # 进程自己退了，基本就是 bind 失败，顺延下一个端口再试
+            last_error = exc
+            server.stop()
+            print(f"[警告] {host}:{candidate} 起不来，换下一个端口", file=sys.stderr)
+            continue
+
+        if not ready:
+            server.stop()
+            raise ConnectionError(
+                f"服务端在 {host}:{candidate} 上起来了，"
+                f"{config.SERVER_START_TIMEOUT:.0f} 秒内却没开始监听。")
+
+        client = GomokuClient(host, candidate)
+        client.connect()
+        print(f"[信息] 已连接到服务端 {host}:{candidate}")
+        return client, server
+
+    detail = (f"最后一条错误：{last_error}" if last_error
+              else "这些端口上都已经有别的程序在监听。")
+    raise ConnectionError(
+        f"{host} 的 {ports[0]}~{ports[-1]} 这 {len(ports)} 个端口都没能用。\n"
+        f"{detail}\n"
+        "关掉占着端口的程序，或者改一下 python/config.py 里的 PORT。")

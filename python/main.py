@@ -23,7 +23,7 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="五子棋（Python 界面 + C++ 计算服务端）")
     parser.add_argument("--host", default=config.HOST, help="服务端地址，默认 %(default)s")
     parser.add_argument("--port", type=int, default=config.PORT,
-                        help="服务端端口，默认 %(default)s")
+                        help="服务端端口池起点，默认 %(default)s（被占用时自动往后顺延）")
     parser.add_argument("--no-autostart", action="store_true", help="连不上时不自动启动服务端")
     parser.add_argument("--verbose", action="store_true", help="把服务端日志打出来，便于排查")
     return parser.parse_args(argv)
@@ -51,7 +51,8 @@ def main(argv=None):
         return 1
 
     try:
-        client, server = network.connect_or_start(config.HOST, config.PORT, verbose=args.verbose)
+        client, server = network.connect_or_start(config.HOST, port=args.port,
+                                                  verbose=args.verbose)
     except ConnectionError as exc:
         print(f"无法建立连接：\n{exc}", file=sys.stderr)
         return 1
