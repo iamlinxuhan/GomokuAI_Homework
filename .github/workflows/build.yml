@@ -45,13 +45,15 @@ jobs:
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json
           import os
+          import sys
 
           targets = [
               {"target": "win-x64", "os": "windows-latest", "family": "windows",
                "arch": "x64", "icon": "Gomoku.ico", "appimage": ""},
               {"target": "win-arm64", "os": "windows-11-arm", "family": "windows",
                "arch": "arm64", "icon": "Gomoku.ico", "appimage": ""},
-              {"target": "linux-x64", "os": "ubuntu-latest", "family": "linux",
+              # 钉住版本，免得 ubuntu-latest 哪天滚到新发行版把构建带崩
+              {"target": "linux-x64", "os": "ubuntu-24.04", "family": "linux",
                "arch": "x64", "icon": "", "appimage": "x86_64"},
               {"target": "linux-arm64", "os": "ubuntu-24.04-arm", "family": "linux",
                "arch": "arm64", "icon": "", "appimage": "aarch64"},
@@ -68,7 +70,9 @@ jobs:
               raise SystemExit(f"没有这个目标：{wanted}")
 
           print("matrix=" + json.dumps(targets))
-          print(f"要构建 {len(targets)} 个目标：{[t['target'] for t in targets]}")
+          # 这句只能走 stderr：stdout 是 $GITHUB_OUTPUT，多写一行非 key=value
+          # 的内容会被 runner 当成非法输出直接报错。
+          print(f"要构建 {len(targets)} 个目标：{[t['target'] for t in targets]}", file=sys.stderr)
           PY
 
   build:
