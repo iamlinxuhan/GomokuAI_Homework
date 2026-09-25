@@ -24,6 +24,12 @@ on:
 permissions:
   contents: write
 
+# Windows 上 Python 默认拿 cp1252 输出，脚本里 print 一句中文就 UnicodeEncodeError，
+# 打包步骤全崩。统一开成 UTF-8。
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: false
@@ -325,10 +331,12 @@ jobs:
             "$PWD/icon/Gomoku.png=/usr/share/icons/hicolor/256x256/apps/gomoku.png"
           )
 
-          fpm "${common[@]}" -t deb -a "$deb_arch" \
-            -p "out/Gomoku-${ver}-linux-${arch}.deb"
-          fpm "${common[@]}" -t rpm -a "$rpm_arch" \
-            -p "out/Gomoku-${ver}-linux-${arch}.rpm"
+          # fpm 要求选项全在位置参数前面，common 数组末尾是待打包的目录和文件，
+          # 所以 -t/-a/-p 得写在数组之前，不能跟在后面。
+          fpm -t deb -a "$deb_arch" -p "out/Gomoku-${ver}-linux-${arch}.deb" \
+            "${common[@]}"
+          fpm -t rpm -a "$rpm_arch" -p "out/Gomoku-${ver}-linux-${arch}.rpm" \
+            "${common[@]}"
           ls -la out
 
       - name: Linux · AppImage
