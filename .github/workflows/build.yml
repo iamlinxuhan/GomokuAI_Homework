@@ -228,8 +228,13 @@ jobs:
           fi
 
           stage=$(cygpath -w "$PWD/dist/dir/Gomoku")
-          "$iscc" /DStage="$stage" /DVersion="$ver" /DArch="$arch" \
-            /O"$(cygpath -w "$PWD/out")" .github/package/gomoku.iss
+          outdir=$(cygpath -w "$PWD/out")
+          # Git Bash 会把 /DStage=... 当 POSIX 路径翻译成 C:/Program Files/Git/DStage=...，
+          # ISCC 就报「You may not specify more than one script filename」。两个变量都设上，
+          # 把这种自动转换关掉。
+          MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
+            "$iscc" /DStage="$stage" /DVersion="$ver" /DArch="$arch" \
+            /O"$outdir" .github/package/gomoku.iss
           ls -la out
 
       # ---------- Linux ----------
