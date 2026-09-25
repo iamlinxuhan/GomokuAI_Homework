@@ -317,6 +317,13 @@ jobs:
           rm -rf pkgroot && mkdir -p pkgroot
           cp -r dist/dir/Gomoku pkgroot/Gomoku
 
+          # -C 之后的源路径都会被当成相对 pkgroot 的，用仓库里的绝对路径会被再拼一次
+          # （Cannot chdir to '<pkgroot>/home/runner/...'），所以 desktop 和图标也先摆进去。
+          mkdir -p pkgroot/usr/share/applications \
+                   pkgroot/usr/share/icons/hicolor/256x256/apps
+          cp .github/package/gomoku.desktop pkgroot/usr/share/applications/gomoku.desktop
+          cp icon/Gomoku.png pkgroot/usr/share/icons/hicolor/256x256/apps/gomoku.png
+
           common=(
             -s dir -n gomoku -v "$ver"
             --prefix /opt/gomoku
@@ -327,8 +334,8 @@ jobs:
             --depends libsm6 --depends libice6 --depends libfontconfig1 --depends libfreetype6
             -C "$PWD/pkgroot"
             Gomoku
-            "$PWD/.github/package/gomoku.desktop=/usr/share/applications/gomoku.desktop"
-            "$PWD/icon/Gomoku.png=/usr/share/icons/hicolor/256x256/apps/gomoku.png"
+            usr/share/applications/gomoku.desktop=/usr/share/applications/gomoku.desktop
+            usr/share/icons/hicolor/256x256/apps/gomoku.png=/usr/share/icons/hicolor/256x256/apps/gomoku.png
           )
 
           # fpm 要求选项全在位置参数前面，common 数组末尾是待打包的目录和文件，
