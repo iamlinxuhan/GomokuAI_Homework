@@ -29,22 +29,57 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 矩阵得在这里现算：job 级的 if 是在矩阵展开之前求值的，那个位置用不了 matrix，
+  # 想「只跑某一个目标」就只能先把要跑的目标筛出来再传下去。
+  setup:
+    name: 选择目标
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - id: pick
+        env:
+          # 直接 push tag 时 github.event.inputs 是空的，落到默认的 all
+          WANTED: ${{ github.event.inputs.target || 'all' }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+
+          targets = [
+              {"target": "win-x64", "os": "windows-latest", "family": "windows",
+               "arch": "x64", "icon": "Gomoku.ico", "appimage": ""},
+              {"target": "win-arm64", "os": "windows-11-arm", "family": "windows",
+               "arch": "arm64", "icon": "Gomoku.ico", "appimage": ""},
+              {"target": "linux-x64", "os": "ubuntu-latest", "family": "linux",
+               "arch": "x64", "icon": "", "appimage": "x86_64"},
+              {"target": "linux-arm64", "os": "ubuntu-24.04-arm", "family": "linux",
+               "arch": "arm64", "icon": "", "appimage": "aarch64"},
+              {"target": "macos-x64", "os": "macos-15-intel", "family": "macos",
+               "arch": "x64", "icon": "Gomoku.icns", "appimage": ""},
+              {"target": "macos-arm64", "os": "macos-15", "family": "macos",
+               "arch": "arm64", "icon": "Gomoku.icns", "appimage": ""},
+          ]
+
+          wanted = os.environ.get("WANTED") or "all"
+          if wanted != "all":
+              targets = [t for t in targets if t["target"] == wanted]
+          if not targets:
+              raise SystemExit(f"没有这个目标：{wanted}")
+
+          print("matrix=" + json.dumps(targets))
+          print(f"要构建 {len(targets)} 个目标：{[t['target'] for t in targets]}")
+          PY
+
   build:
     name: ${{ matrix.target }}
+    needs: setup
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
-    # push tag 时 github.event.inputs 是空的，这个条件就直接放行
-    if: ${{ github.event.inputs.target == '' || github.event.inputs.target == 'all' || github.event.inputs.target == matrix.target }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { target: win-x64,      os: windows-latest,  family: windows, arch: x64,   icon: Gomoku.ico,  appimage: "" }
-          - { target: win-arm64,    os: windows-11-arm,  family: windows, arch: arm64, icon: Gomoku.ico,  appimage: "" }
-          - { target: linux-x64,    os: ubuntu-latest,   family: linux,   arch: x64,   icon: "",          appimage: x86_64 }
-          - { target: linux-arm64,  os: ubuntu-24.04-arm, family: linux, arch: arm64, icon: "",          appimage: aarch64 }
-          - { target: macos-x64,    os: macos-15-intel,  family: macos,   arch: x64,   icon: Gomoku.icns, appimage: "" }
-          - { target: macos-arm64,  os: macos-15,        family: macos,   arch: arm64, icon: Gomoku.icns, appimage: "" }
+        include: ${{ fromJSON(needs.setup.outputs.matrix) }}
 
     defaults:
       run:
