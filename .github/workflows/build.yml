@@ -15,7 +15,6 @@ on:
         options:
           - all
           - win-x64
-          - win-arm64
           - linux-x64
           - linux-arm64
           - macos-x64
@@ -54,10 +53,10 @@ jobs:
           import sys
 
           targets = [
+              # 只做 win-x64：pygame 官方没发 Windows ARM64 的预编译包，
+              # pip 退回去编译源码必挂，等它出了 wheel 再加回来。
               {"target": "win-x64", "os": "windows-latest", "family": "windows",
                "arch": "x64", "icon": "Gomoku.ico", "appimage": ""},
-              {"target": "win-arm64", "os": "windows-11-arm", "family": "windows",
-               "arch": "arm64", "icon": "Gomoku.ico", "appimage": ""},
               # 钉住版本，免得 ubuntu-latest 哪天滚到新发行版把构建带崩
               {"target": "linux-x64", "os": "ubuntu-24.04", "family": "linux",
                "arch": "x64", "icon": "", "appimage": "x86_64"},
@@ -210,52 +209,8 @@ jobs:
           "
           ls -la out
 
-      - name: Windows · MSI
-        if: matrix.family == 'windows'
-        run: |
-          set -euo pipefail
-          ver='${{ steps.ver.outputs.version }}'
-          arch='${{ matrix.arch }}'
-
-          dotnet tool install --global wix --version "5.*" || dotnet tool install --global wix
-          export PATH="$HOME/.dotnet/tools:$PATH"
-          wix extension add -g WixToolset.Files.wixext
-
-          # <Files Include="**"> 是按 .wxs 所在目录扫的，所以把 wxs 摆进待打包目录里
-          rm -rf staging && mkdir -p staging
-          cp -r dist/dir/Gomoku/. staging/
-          cp .github/package/gomoku.wxs staging/gomoku.wxs
-
-          wix build -arch "$arch" \
-            -d Version="$ver" \
-            -ext WixToolset.Files.wixext \
-            -o "out/Gomoku-${ver}-windows-${arch}.msi" \
-            staging/gomoku.wxs
-          ls -la out
-
-      - name: Windows · NSIS 安装包
-        if: matrix.family == 'windows'
-        run: |
-          set -euo pipefail
-          ver='${{ steps.ver.outputs.version }}'
-          arch='${{ matrix.arch }}'
-
-          makensis=$(command -v makensis || true)
-          if [[ -z "$makensis" && -x "/c/Program Files (x86)/NSIS/makensis.exe" ]]; then
-            makensis="/c/Program Files (x86)/NSIS/makensis.exe"
-          fi
-          if [[ -z "$makensis" ]]; then
-            choco install nsis -y --no-progress
-            makensis="/c/Program Files (x86)/NSIS/makensis.exe"
-          fi
-
-          # makensis 是原生程序，喂它 MSYS 路径它看不懂
-          stage=$(cygpath -w "$PWD/dist/dir/Gomoku")
-          outfile=$(cygpath -w "$PWD/out/Gomoku-${ver}-windows-${arch}-setup.exe")
-
-          "$makensis" -DSTAGE="$stage" -DVERSION="$ver" -DARCH="$arch" -DOUTFILE="$outfile" \
-            .github/package/gomoku.nsi
-          ls -la out
+      # MSI 和 NSIS 的打包定义留在 .github/package/ 里没人用了：wix 那条链在 runner
+      # 上从来没跑通过，NSIS 又和 Inno 功能重复，日常装一个 Inno 的就够了。
 
       - name: Windows · Inno Setup 安装包
         if: matrix.family == 'windows'
@@ -424,8 +379,13 @@ jobs:
           rm -rf dmgroot && mkdir -p dmgroot
           cp -r dist/dir/Gomoku.app dmgroot/
           ln -s /Applications dmgroot/Applications
-          hdiutil create -volname "Gomoku" -srcfolder dmgroot -ov -format UDZO \
-            "out/Gomoku-${ver}-macos-${arch}.dmg"
+          # runner 上偶发 Resource busy，重试几次就过去了
+          for i in 1 2 3; do
+            if hdiutil create -volname "Gomoku" -srcfolder dmgroot -ov -format UDZO \
+                 "out/Gomoku-${ver}-macos-${arch}.dmg"; then break; fi
+            echo "hdiutil 第 $i 次失败，等等再试"; sleep 5
+            [[ "$i" == "3" ]] && exit 1
+          done
 
           pkgbuild --component dist/dir/Gomoku.app \
             --install-location /Applications \
