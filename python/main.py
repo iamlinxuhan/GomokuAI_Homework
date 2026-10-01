@@ -1,4 +1,5 @@
-# 图形客户端入口。用法见 python/main.py --help
+#吝旭涵原创
+#图形客户端入口，用法见 python/main.py --help
 
 import argparse
 import os

@@ -33,26 +33,26 @@ std::string Game::playHuman(int x, int y) {
 bool Game::playAi() {
     if (!aiToMove()) return false;
 
-    int x = SIZE / 2 - 1;
-    int y = SIZE / 2 - 1;
-    if (!history_.empty()) chooseMove(cells_, ai_, difficulty_, x, y);
+    int a = SIZE / 2 - 1;  //ai落子的坐标，跟原版一样叫 a、b
+    int b = SIZE / 2 - 1;
+    if (!history_.empty()) chooseMove(cells_, ai_, difficulty_, a, b);
 
-    // AI 偶尔会给出不合法的点（理论上不会），兜底随便找个空位
-    if (x < 0 || x >= SIZE || y < 0 || y >= SIZE || cells_[y][x] != EMPTY) {
-        bool found = false;
-        for (int j = 0; j < SIZE && !found; ++j) {
-            for (int i = 0; i < SIZE && !found; ++i) {
+    // AI 理论上不会给非法点，兜底随便找个空位
+    if (a < 0 || a >= SIZE || b < 0 || b >= SIZE || cells_[b][a] != EMPTY) {
+        bool ok = false;
+        for (int j = 0; j < SIZE && !ok; ++j) {
+            for (int i = 0; i < SIZE && !ok; ++i) {
                 if (cells_[j][i] == EMPTY) {
-                    x = i;
-                    y = j;
-                    found = true;
+                    a = i;
+                    b = j;
+                    ok = true;
                 }
             }
         }
-        if (!found) return false;
+        if (!ok) return false;
     }
 
-    put(x, y, ai_);
+    put(a, b, ai_);
     return true;
 }
 

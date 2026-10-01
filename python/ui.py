@@ -1,5 +1,5 @@
-# pygame 界面。两个状态：menu 选棋子和难度，game 是棋盘加右侧面板。
-# 坐标约定跟服务端一致，x 是列、y 是行。
+# pygame 界面。两个状态：menu 选棋子和难度，game 是棋盘加右边面板
+# 坐标跟服务端一致，x 是列、y 是行
 
 import pygame
 
@@ -248,7 +248,7 @@ class GomokuApp:
                 config.BOARD_ORIGIN[1] + y * config.CELL)
 
     def _screen_to_board(self, pos):
-        """屏幕像素 -> (列, 行)。离交叉点超过半格或越界则返回 None。"""
+        # 屏幕像素换成 (列, 行)，离交叉点超过半格或者出界就返回 None
         mx, my = pos
         fx = (mx - config.BOARD_ORIGIN[0]) / config.CELL
         fy = (my - config.BOARD_ORIGIN[1]) / config.CELL
@@ -308,8 +308,8 @@ class GomokuApp:
             self.thinking_started = self.time
 
     def _show_error(self, text):
-        """弹一条几秒后消失的提示，同时找服务端要一次 state ——
-        本地可能已经乐观地画了棋子，得拿权威棋盘覆盖回来。"""
+        # 弹一条几秒后消失的提示，顺手找服务端要一次 state ——
+        # 本地可能已经乐观地画了棋子，得拿服务端的棋盘覆盖回来
         self.transient_error = text
         self.transient_until = self.time + 4.0
         self.thinking = False

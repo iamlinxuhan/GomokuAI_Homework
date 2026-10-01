@@ -17,7 +17,7 @@ MSG_BAD_MESSAGE = "_bad_message"
 
 
 class ServerProcess:
-    """按需拉起编译好的服务端，退出时负责回收。"""
+    # 按需拉起服务端，退出时负责回收
 
     def __init__(self, exe_path):
         self.exe_path = exe_path
@@ -99,7 +99,7 @@ def is_our_server(host, port, timeout=0.6):
 
 
 def wait_for_port(host, port, timeout, proc=None):
-    """等端口可连接；proc 中途退出就直接报错，不用干等到超时。"""
+    # 等端口能连上；proc 中途退了就直接报错，不用干等到超时
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if proc is not None and proc.poll() is not None:
@@ -215,7 +215,7 @@ class GomokuClient:
                                      "message": f"收到无法解析的数据：{exc}"})
 
     def poll(self):
-        """取出当前已到达的全部消息，没有就返回空列表。"""
+        # 把已经到了的消息全取出来，没有就返回空表
         messages = []
         while True:
             try:
@@ -225,11 +225,8 @@ class GomokuClient:
 
 
 def connect_or_start(host=config.HOST, port=None, verbose=False):
-    """返回 (client, server)。
-
-    端口池里已经有服务端就直接连，这时 server 是 None（表示不归我们管）；
-    否则自己拉起一个，退出时负责关掉。
-    """
+    # 返回 (client, server)。端口池里已经有服务端就直接连，这时 server 是 None
+    # （不归我们管）；否则自己拉起一个，退出时负责关掉
     ports = config.port_pool(port)
 
     for candidate in ports:

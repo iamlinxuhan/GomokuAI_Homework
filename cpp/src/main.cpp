@@ -1,5 +1,5 @@
-// 五子棋计算服务端：维护棋局 + 跑 AI，通过 TCP 用 JSON 行协议和 pygame 客户端通信。
-// 界面的事全在 Python 那边，这里不碰任何平台相关的窗口 / 控制台 API。
+//吝旭涵原创
+//服务端：算棋 + 走 TCP 收发 JSON，界面全在 Python 那边
 
 #include <csignal>
 #include <cstdio>

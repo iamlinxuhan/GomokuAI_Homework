@@ -107,8 +107,8 @@ struct Client {
 
 bool reply(Client& c, const json& msg) { return sendAll(c.sock, encodeLine(msg)); }
 
-// 玩家落子 / 开局之后统一从这里出状态。
-// 轮到 AI 就先回一条 thinking=true，让界面立刻把刚下的一手画出来，算完再回最终结果。
+// 落子 / 开局之后统一从这儿出状态。轮到 AI 就先回一条 thinking=true，
+// 让界面先把刚下的这手画出来，算完再回最终结果
 bool afterMove(Client& c) {
     if (c.game.aiToMove()) {
         if (!reply(c, c.game.toJson(true, "AI正在思考中..."))) return false;
@@ -129,7 +129,7 @@ bool dispatch(Client& c, const std::string& line) {
     const std::string type = msg.value("type", "");
     if (type.empty()) return reply(c, errorMsg("消息缺少 type 字段"));
 
-    // 字段类型不对时 nlohmann 会抛异常，统一在这里兜住
+    // 字段类型不对 nlohmann 会抛异常，在这儿统一兜住
     try {
         if (type == "new_game") {
             const int player = msg.value("player", BLACK);
@@ -200,7 +200,7 @@ bool TcpServer::bindAndListen(std::string& error) {
         return false;
     }
 
-    // 端口传 0 时由系统分配，这里把实际端口读回来
+    // 端口传 0 就是让系统分配，这里把实际端口读回来
     sockaddr_in bound{};
     socklen_t len = sizeof(bound);
     if (::getsockname(fd(s), reinterpret_cast<sockaddr*>(&bound), &len) == 0) {

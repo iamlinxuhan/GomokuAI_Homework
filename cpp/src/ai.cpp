@@ -11,8 +11,7 @@ using Clock = std::chrono::steady_clock;
 
 const int DIRS[4][2] = {{1, 1}, {1, 0}, {0, 1}, {1, -1}};
 
-// 正常评估值的量级在 1e10 以内，这两个数比它高两个数量级，
-// 所以一出现就只可能是必胜 / 必败
+// 正常评估值到不了 1e11，这俩数比它高两个数量级，出现就只可能是必胜 / 必败
 const long long WIN = 1000000000000LL;
 const long long INF = 1000000000000000LL;
 
@@ -20,7 +19,7 @@ const int ROOT_WIDTH = 14;   // 根节点展开的候选数
 const int INNER_WIDTH = 10;  // 内层展开的候选数
 
 struct Board {
-    int c[SIZE][SIZE];
+    int qi_p[SIZE][SIZE];  // 棋盘，跟原版叫一个名字
 };
 
 struct Cand {
@@ -43,7 +42,7 @@ bool hasFive(const Board& b, int x, int y, int player) {
         int n = 1;
         for (int sign = -1; sign <= 1; sign += 2) {
             int i = x + d[0] * sign, j = y + d[1] * sign;
-            while (inBoard(i, j) && b.c[j][i] == player) {
+            while (inBoard(i, j) && b.qi_p[j][i] == player) {
                 ++n;
                 i += d[0] * sign;
                 j += d[1] * sign;
@@ -54,12 +53,12 @@ bool hasFive(const Board& b, int x, int y, int player) {
     return false;
 }
 
-// 原版 arnd：周围 3x3 里的棋子数
-int neighbors(const Board& b, int x, int y) {
+// 周围 3x3 里的棋子数，原版叫 arnd
+int arnd(const Board& b, int x, int y) {
     int n = 0;
     for (int j = y - 1; j <= y + 1; ++j)
         for (int i = x - 1; i <= x + 1; ++i)
-            if (inBoard(i, j) && b.c[j][i] != EMPTY) ++n;
+            if (inBoard(i, j) && b.qi_p[j][i] != EMPTY) ++n;
     return n;
 }
 
@@ -84,12 +83,12 @@ long long pointValue(const Board& b, int x, int y, int player) {
         int n = 1, open = 0;
         for (int sign = -1; sign <= 1; sign += 2) {
             int i = x + d[0] * sign, j = y + d[1] * sign;
-            while (inBoard(i, j) && b.c[j][i] == player) {
+            while (inBoard(i, j) && b.qi_p[j][i] == player) {
                 ++n;
                 i += d[0] * sign;
                 j += d[1] * sign;
             }
-            if (inBoard(i, j) && b.c[j][i] == EMPTY) ++open;
+            if (inBoard(i, j) && b.qi_p[j][i] == EMPTY) ++open;
         }
         total += shapeValue(n, open);
     }
@@ -107,11 +106,11 @@ long long windowScore(const Board& b, int player, int weight) {
             for (const auto& d : DIRS) {
                 int x = i, y = j, n = 0, tk = 0;
                 for (int k = 0; k < 5; ++k) {
-                    if (!inBoard(x, y) || b.c[y][x] == foe) {
+                    if (!inBoard(x, y) || b.qi_p[y][x] == foe) {
                         n = 0;
                         break;
                     }
-                    if (b.c[y][x] == player) {
+                    if (b.qi_p[y][x] == player) {
                         ++n;
                         tk |= 1 << k;
                     }
@@ -142,7 +141,7 @@ int collect(const Board& b, int mover, int foe, Cand* out, int limit) {
     int n = 0;
     for (int y = 0; y < SIZE; ++y) {
         for (int x = 0; x < SIZE; ++x) {
-            if (b.c[y][x] != EMPTY || neighbors(b, x, y) == 0) continue;
+            if (b.qi_p[y][x] != EMPTY || arnd(b, x, y) == 0) continue;
             // 自己的棋型算双份，但“堵对手成五”也得排到前面去
             out[n++] = {x, y, pointValue(b, x, y, mover) * 2 + pointValue(b, x, y, foe)};
         }
@@ -163,7 +162,7 @@ long long minimax(Board& b, int depth, long long alpha, long long beta, bool max
     if ((++ctx.nodes & 0x3FF) == 0 && Clock::now() >= ctx.deadline) ctx.timeout = true;
     if (ctx.timeout) return 0;  // 结果没意义，调用方会整层丢掉
 
-    // 上一步已经成五，直接给终局分；用剩余深度微调，让 AI 更愿意早点取胜
+    // 上一步已经成五就直接给终局分，用剩余深度微调一下，让 AI 愿意早点取胜
     if (hasFive(b, lastX, lastY, lastPlayer)) {
         const long long s = WIN + depth;
         return lastPlayer == ctx.ai ? s : -s;
@@ -179,10 +178,10 @@ long long minimax(Board& b, int depth, long long alpha, long long beta, bool max
 
     long long best = maximize ? -INF : INF;
     for (int i = 0; i < n; ++i) {
-        b.c[cands[i].y][cands[i].x] = mover;
+        b.qi_p[cands[i].y][cands[i].x] = mover;
         const long long v =
             minimax(b, depth - 1, alpha, beta, !maximize, cands[i].x, cands[i].y, mover, width, ctx);
-        b.c[cands[i].y][cands[i].x] = EMPTY;
+        b.qi_p[cands[i].y][cands[i].x] = EMPTY;
         if (ctx.timeout) return 0;
 
         if (maximize) {
@@ -209,7 +208,7 @@ int budgetMs(int difficulty) {
 bool boardEmpty(const Board& b) {
     for (int y = 0; y < SIZE; ++y)
         for (int x = 0; x < SIZE; ++x)
-            if (b.c[y][x] != EMPTY) return false;
+            if (b.qi_p[y][x] != EMPTY) return false;
     return true;
 }
 
@@ -217,7 +216,7 @@ bool boardEmpty(const Board& b) {
 
 void chooseMove(const int board[SIZE][SIZE], int aiPlayer, int difficulty, int& outX, int& outY) {
     Board b;
-    std::memcpy(b.c, board, sizeof(b.c));
+    std::memcpy(b.qi_p, board, sizeof(b.qi_p));
 
     const int center = SIZE / 2 - 1;
     if (boardEmpty(b)) {
@@ -232,7 +231,7 @@ void chooseMove(const int board[SIZE][SIZE], int aiPlayer, int difficulty, int& 
         outX = outY = center;
         for (int y = 0; y < SIZE; ++y) {
             for (int x = 0; x < SIZE; ++x) {
-                if (b.c[y][x] == EMPTY) {
+                if (b.qi_p[y][x] == EMPTY) {
                     outX = x;
                     outY = y;
                     return;
@@ -245,9 +244,9 @@ void chooseMove(const int board[SIZE][SIZE], int aiPlayer, int difficulty, int& 
     // 能一步成五就赢，对手能一步成五就堵
     for (int i = 0; i < n; ++i) {
         for (int who : {aiPlayer, human}) {
-            b.c[cands[i].y][cands[i].x] = who;
+            b.qi_p[cands[i].y][cands[i].x] = who;
             const bool five = hasFive(b, cands[i].x, cands[i].y, who);
-            b.c[cands[i].y][cands[i].x] = EMPTY;
+            b.qi_p[cands[i].y][cands[i].x] = EMPTY;
             if (five) {
                 outX = cands[i].x;
                 outY = cands[i].y;
@@ -278,11 +277,11 @@ void chooseMove(const int board[SIZE][SIZE], int aiPlayer, int difficulty, int& 
         int bestX = -1, bestY = -1;
 
         for (int i = 0; i < n; ++i) {
-            b.c[cands[i].y][cands[i].x] = aiPlayer;
+            b.qi_p[cands[i].y][cands[i].x] = aiPlayer;
             const long long v =
                 minimax(b, depth - 1, alpha, INF, false, cands[i].x, cands[i].y, aiPlayer,
                         INNER_WIDTH, ctx);
-            b.c[cands[i].y][cands[i].x] = EMPTY;
+            b.qi_p[cands[i].y][cands[i].x] = EMPTY;
             if (ctx.timeout) break;
 
             if (v > best) {

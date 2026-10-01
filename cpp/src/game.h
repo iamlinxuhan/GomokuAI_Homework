@@ -1,5 +1,5 @@
-// 棋盘状态机。只管规则，不管网络也不管界面。
-// 坐标 x 为列、y 为行，内部存成 cells_[y][x]。
+//棋盘状态机，只管规则，不管网络也不管界面
+//坐标 x 是列、y 是行，存成 cells_[y][x]
 #pragma once
 
 #include <string>
@@ -30,11 +30,11 @@ public:
 
     void reset(int humanSide, int difficulty);
 
-    // 返回空串表示成功，否则是给玩家看的中文提示
+    // 返回空串就是成功，非空是给玩家看的中文提示
     std::string playHuman(int x, int y);
     std::string undo();
 
-    // 轮到 AI 就落一子，返回是否真的落了
+    // 轮到 AI 就落一子，返回有没有真的落
     bool playAi();
     bool aiToMove() const { return !over_ && turn_ == ai_; }
 
