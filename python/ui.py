@@ -1,8 +1,5 @@
-"""pygame 界面。
-
-两个状态：menu（选棋子、选难度）和 game（棋盘 + 右侧面板，结束时叠结算浮层）。
-坐标约定跟服务端一致：x 是列、y 是行。
-"""
+# pygame 界面。两个状态：menu 选棋子和难度，game 是棋盘加右侧面板。
+# 坐标约定跟服务端一致，x 是列、y 是行。
 
 import pygame
 
@@ -97,8 +94,7 @@ class GomokuApp:
 
         self.font_path = config.find_cjk_font()
         if self.font_path is None:
-            print("[警告] 没找到中文字体，界面上的汉字可能显示成方块。")
-            print("       装一个 fonts-noto-cjk（Debian/Ubuntu）再试。")
+            print("[警告] 没找到中文字体，界面上的汉字会变成方块。")
         self._font_cache = {}
 
         self.time = 0.0
@@ -209,9 +205,8 @@ class GomokuApp:
     def _active_buttons(self):
         if self.state == "menu":
             return self.menu_buttons
-        # 结算浮层只盖住棋盘，右侧面板仍然能用（比如输棋后想悔棋）。
-        # 但浮层按钮必须等对局结束才生效：它画在棋盘正中，对局中虽然看不见，
-        # 判定却是开着的，点到就是重开或者直接退出。
+        # 浮层按钮只在 game_over 时才响应点击：它画在棋盘正中，对局中虽然看不见，
+        # 判定却开着，点到就是重开或者直接退出
         if self.game_over:
             return self.panel_buttons + self.over_buttons
         return self.panel_buttons
@@ -240,9 +235,8 @@ class GomokuApp:
             self._fatal(str(exc))
             return
 
-        # 先本地落子，界面立刻响应，不等一个网络来回。
-        # 服务端回的 state 会把棋盘覆盖掉；万一这手被判非法，
-        # _show_error 会主动再拉一次 state 同步回来。
+        # 先本地落子，界面立刻响应，不等一个网络来回。服务端回的 state 会覆盖棋盘；
+        # 万一这手被判非法，_show_error 会再拉一次 state 同步回来
         self.board[y][x] = self.human_player
         self.last_move = (x, y)
         self.thinking = True

@@ -11,7 +11,8 @@ using Clock = std::chrono::steady_clock;
 
 const int DIRS[4][2] = {{1, 1}, {1, 0}, {0, 1}, {1, -1}};
 
-// 评估函数的取值范围到不了 1e7，所以这两个数一出现就等于是必胜 / 必败
+// 正常评估值的量级在 1e10 以内，这两个数比它高两个数量级，
+// 所以一出现就只可能是必胜 / 必败
 const long long WIN = 1000000000000LL;
 const long long INF = 1000000000000000LL;
 

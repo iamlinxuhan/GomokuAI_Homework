@@ -1,7 +1,4 @@
-"""全局配置：网络、棋盘规则、界面尺寸、配色、字体和服务端可执行文件的查找。
-
-路径一律用 os.path 拼，Windows / Linux / macOS 通用。
-"""
+# 全局配置：网络、棋盘、界面尺寸、配色、字体，以及服务端可执行文件的查找
 
 import os
 import sys
@@ -19,21 +16,14 @@ SERVER_EXE_NAME = "gomoku_server.exe" if IS_WINDOWS else "gomoku_server"
 
 
 def bundled_dir():
-    """打包后随程序一起发出去的文件放在哪。
-
-    onefile 下是临时解压目录，onedir 下是 exe 旁边的 _internal。
-    没打包（直接跑源码）时就是项目根目录。
-    """
+    # 打包后：onefile 是临时解压目录，onedir 是 exe 旁边的 _internal
     if FROZEN:
         return getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
     return PROJECT_ROOT
 
 
 def executable_dir():
-    """可执行文件自己所在的目录。onedir 绿色版里服务端就摆在这儿。
-
-    没打包时返回项目根目录，保持和之前一样的查找行为。
-    """
+    # onedir 绿色版把服务端摆在 exe 旁边
     if FROZEN:
         return os.path.dirname(os.path.abspath(sys.executable))
     return PROJECT_ROOT
@@ -45,11 +35,7 @@ PORT_POOL_SIZE = 15   # 8888 被占了就顺着 8889、8890…… 往下找，�
 
 
 def port_pool(base=None, size=None):
-    """从起点依次排开的候选端口。
-
-    机器上常有上一次没退干净的服务端、或者别的程序占着 8888，写死一个端口的话
-    bind 失败整个程序就起不来了，所以留一串备用的。
-    """
+    # 写死一个端口的话，被别的程序占着就 bind 不上，整个程序起不来
     base = PORT if base is None else base
     size = PORT_POOL_SIZE if size is None else size
     return list(range(base, base + size))
@@ -188,7 +174,7 @@ def server_executable_candidates():
     names += ["gomoku_server", "gomoku_server.exe"] if IS_WINDOWS else ["gomoku_server.exe"]
 
     dirs = [
-        # 打包后：ondir 绿色版放在 exe 旁边，onefile 放在解压目录里
+        # 打包后：onedir 绿色版放在 exe 旁边，onefile 放在解压目录里
         executable_dir(),
         bundled_dir(),
         # 没打包时：CMake 的各个输出位置

@@ -1,8 +1,4 @@
-"""网络层：拉起 C++ 服务端、连上去、收发 JSON 行协议。
-
-收数据放在独立线程里，解析好的消息丢进 queue，渲染循环用 poll() 非阻塞地取，
-所以 AI 思考时界面照样刷新。断线一类的异常也包装成消息，不往渲染循环里抛。
-"""
+# 网络层：拉起 C++ 服务端、连上去、收发 JSON 行协议
 
 import json
 import os
@@ -66,11 +62,8 @@ class ServerProcess:
 
 
 def port_is_open(host, port, timeout=0.2):
-    """端口上有没有活着的监听者。
-
-    TIME_WAIT 里的旧连接不算占着：服务端 bind 时带了 SO_REUSEADDR，
-    这种情况它照样绑得上，所以这里用 connect 而不是 bind 来判断。
-    """
+    # 用 connect 而不是 bind 判断：TIME_WAIT 的旧连接不算占着端口，
+    # 服务端带了 SO_REUSEADDR，这种情况照样绑得上
     try:
         with socket.create_connection((host, port), timeout=timeout):
             return True
@@ -79,11 +72,8 @@ def port_is_open(host, port, timeout=0.2):
 
 
 def is_our_server(host, port, timeout=0.6):
-    """端口上跑的是不是我们的服务端。
-
-    光看「端口开着」不够：占着 8888 的完全可能是别的程序，那样连上去也是白连。
-    所以真发一条只读的 state 过去，回得出 JSON 状态的就认。
-    """
+    # 光看端口开着不够——占着 8888 的可能是别的程序。发一条只读的 state 过去，
+    # 回得出 JSON 状态的才认
     try:
         with socket.create_connection((host, port), timeout=timeout) as sock:
             sock.settimeout(timeout)
@@ -237,11 +227,8 @@ class GomokuClient:
 def connect_or_start(host=config.HOST, port=None, verbose=False):
     """返回 (client, server)。
 
-    端口池里已经有服务端就直接连，返回的 server 是 None（说明这个进程不归我们管）；
-    否则自己拉起可执行文件，退出时负责关掉。
-
-    端口是一个个顺延着试的：8888 被别的程序占着就换 8889，直到找出一个能用的，
-    免得端口一冲突整个程序就起不来。
+    端口池里已经有服务端就直接连，这时 server 是 None（表示不归我们管）；
+    否则自己拉起一个，退出时负责关掉。
     """
     ports = config.port_pool(port)
 

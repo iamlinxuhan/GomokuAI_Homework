@@ -1,10 +1,4 @@
-"""图形客户端入口。
-
-    python python/main.py [--host 127.0.0.1] [--port 8888] [--no-autostart] [--verbose]
-
-先连已经在跑的服务端，连不上就自己拉起 cpp/build/bin/gomoku_server，
-退出时顺手把它关掉。
-"""
+# 图形客户端入口。用法见 python/main.py --help
 
 import argparse
 import os
