@@ -7,7 +7,7 @@
 拆开之后 C++ 那边不再碰任何平台相关的头文件，Linux / Windows / macOS 都能编译，
 界面也随时能换（比如换成一个 Web 前端），代价是多了一层进程间通信。
 
-原来的控制台版留在根目录的 `main.cpp` 里，不参与构建，留着对照。
+最初手写的控制台版留在根目录的 `gomoku ai for c__first.cpp` 里，不参与构建，留着对照。
 
 ## 怎么跑
 
@@ -59,7 +59,7 @@ python python/main.py --verbose       # 把服务端日志打到终端
 
 ```
 .
-├── main.cpp                 原始 Windows 控制台版本（保留作对照，不参与构建）
+├── gomoku ai for c__first.cpp  最初手写的 Windows 控制台版（保留作对照，不参与构建）
 ├── cpp/
 │   ├── CMakeLists.txt
 │   ├── src/
