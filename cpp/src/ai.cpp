@@ -11,7 +11,7 @@ using Clock = std::chrono::steady_clock;
 
 const int DIRS[4][2] = {{1, 1}, {1, 0}, {0, 1}, {1, -1}};
 
-// 正常评估值到不了 1e11，这俩数比它高两个数量级，出现就只可能是必胜 / 必败
+// 这俩数大得离谱，正常评估值根本到不了这个量级，出现就只可能是必胜 / 必败
 const long long WIN = 1000000000000LL;
 const long long INF = 1000000000000000LL;
 

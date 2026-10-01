@@ -1,5 +1,5 @@
 //吝旭涵原创
-//服务端：算棋 + 走 TCP 收发 JSON，界面全在 Python 那边
+//服务端入口
 
 #include <csignal>
 #include <cstdio>

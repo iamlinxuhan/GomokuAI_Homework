@@ -62,8 +62,8 @@ class ServerProcess:
 
 
 def port_is_open(host, port, timeout=0.2):
-    # 用 connect 而不是 bind 判断：TIME_WAIT 的旧连接不算占着端口，
-    # 服务端带了 SO_REUSEADDR，这种情况照样绑得上
+    # 用 connect 判断：TIME_WAIT 的旧连接不算占着端口，服务端带了 SO_REUSEADDR，
+    # 这种情况照样绑得上
     try:
         with socket.create_connection((host, port), timeout=timeout):
             return True
@@ -72,8 +72,8 @@ def port_is_open(host, port, timeout=0.2):
 
 
 def is_our_server(host, port, timeout=0.6):
-    # 光看端口开着不够——占着 8888 的可能是别的程序。发一条只读的 state 过去，
-    # 回得出 JSON 状态的才认
+    # 光看端口开着不够，占着 8888 的可能是别的程序。发一条只读的 state
+    # 过去，回得出 JSON 状态的才认
     try:
         with socket.create_connection((host, port), timeout=timeout) as sock:
             sock.settimeout(timeout)
@@ -225,8 +225,8 @@ class GomokuClient:
 
 
 def connect_or_start(host=config.HOST, port=None, verbose=False):
-    # 返回 (client, server)。端口池里已经有服务端就直接连，这时 server 是 None
-    # （不归我们管）；否则自己拉起一个，退出时负责关掉
+    # 端口池里已经有服务端就直接连，这时 server 是 None（不归我们管）；
+    # 否则自己拉起一个，退出时负责关掉
     ports = config.port_pool(port)
 
     for candidate in ports:

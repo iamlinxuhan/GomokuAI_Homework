@@ -1,11 +1,7 @@
 # 五子棋 AI
 
-原来的版本是个 Windows 控制台程序，用 `<windows.h>`、鼠标 API 和控制台绘图写的，
-只能在 Windows 上跑。这次把它拆成了两块：C++ 只管算棋，Python 只管画界面，
-中间走 TCP + JSON。
-
-拆开之后 C++ 那边不再碰任何平台相关的头文件，Linux / Windows / macOS 都能编译，
-界面也随时能换（比如换成一个 Web 前端），代价是多了一层进程间通信。
+原来的版本是个 Windows 控制台程序，只能在 Windows 上跑。这次拆成了两块：
+C++ 服务端只算棋，Python 客户端只画界面，中间走 TCP + JSON。
 
 最初手写的控制台版留在根目录的 `gomoku ai for c__first.cpp` 里，不参与构建，留着对照。
 
@@ -14,34 +10,31 @@
 先编 C++ 服务端：
 
 ```bash
-cd cpp
-mkdir -p build && cd build
-cmake ..
-cmake --build . --config Release
+cd cpp && mkdir -p build && cd build
+cmake .. && cmake --build . --config Release
 ```
 
 产物是 `cpp/build/bin/gomoku_server`（Windows 上是 `gomoku_server.exe`）。
-Windows 下用 MSVC 或 MinGW 的话换个 generator：
+Windows 下换 generator：
 
 ```bash
 cmake -S . -B build -G "Visual Studio 17 2022"   # 然后 cmake --build build --config Release
 cmake -S . -B build -G "MinGW Makefiles"         # 然后 cmake --build build
 ```
 
-需要 CMake ≥ 3.16，以及支持 C++17 的编译器（GCC 8+ / Clang 7+ / MSVC 2019+）。
+需要 CMake ≥ 3.16，以及支持 C++17 的编译器。
 
-再装 Python 依赖（只有 pygame 一个，网络和 JSON 都用标准库），然后启动：
+装依赖（只有 pygame 一个，网络和 JSON 都用标准库），然后启动：
 
 ```bash
 pip install -r python/requirements.txt
 python python/main.py
 ```
 
-启动顺序是自动的：客户端先试着连 `127.0.0.1:8888`，连不上就自己把服务端拉起来，
-等端口就绪再连，退出时顺手关掉。端口上要是已经有一个服务端在跑，就直接复用不重复启动。
-8888 被别的程序占着也没事，它会顺着 8889、8890 往下找，一共试 15 个。
+客户端会先试着连 `127.0.0.1:8888`，连不上就自己把服务端拉起来，退出时顺手关掉；
+端口上已经有服务端就直接复用。8888 被占了会自动往后找。
 
-几个常用参数：
+常用参数：
 
 ```bash
 python python/main.py --port 9000     # 换端口池的起点
@@ -49,43 +42,29 @@ python python/main.py --no-autostart  # 只连接，不自己启动服务端
 python python/main.py --verbose       # 把服务端日志打到终端
 ```
 
-服务端也能单独跑：
-
-```bash
-./cpp/build/bin/gomoku_server --host 127.0.0.1 --port 8888
-```
+服务端也能单独跑：`./cpp/build/bin/gomoku_server --host 127.0.0.1 --port 8888`
 
 ## 目录结构
 
 ```
 .
-├── gomoku ai for c__first.cpp  最初手写的 Windows 控制台版（保留作对照，不参与构建）
+├── gomoku ai for c__first.cpp   最初手写的控制台版，不参与构建
 ├── cpp/
 │   ├── CMakeLists.txt
-│   ├── src/
-│   │   ├── main.cpp         服务端入口：命令行参数、信号处理、启动日志
-│   │   ├── protocol.h       协议的字段名与坐标约定，外加两个小工具函数
-│   │   ├── game.h/.cpp      棋盘状态机（纯逻辑，无 IO、无网络）
-│   │   ├── ai.h/.cpp        AI：minimax + alpha-beta + 启发式排序
-│   │   └── tcp_server.h/.cpp跨平台 TCP 服务端（winsock2 / POSIX 条件编译）
-│   └── third_party/
-│       └── json.hpp         nlohmann/json 3.11.3 单头文件（随仓库一起提交）
+│   ├── src/                     main.cpp / protocol.h / game.* / ai.* / tcp_server.*
+│   └── third_party/json.hpp     nlohmann/json 3.11.3
 ├── python/
-│   ├── main.py              客户端入口：连服务端 → 开窗口
-│   ├── ui.py                pygame 界面
-│   ├── network.py           TCP 客户端 + 服务端子进程管理
-│   ├── config.py            全部可调参数（地址、端口、尺寸、配色、字体）
+│   ├── main.py  ui.py  network.py  config.py
 │   └── requirements.txt
 └── README.md
 ```
 
 ## 玩法
 
-* 18×18 棋盘，黑棋先行，任意方向连成 5 子获胜，下满为平局。
-* 开始界面选执黑先手还是执白后手，再选 1~4 级难度。
-* 对局中点交叉点落子；右侧「悔棋」回退你和 AI 各一步，每局 3 次。
-* 快捷键：`U` 悔棋，`Esc` 返回主菜单。
-* 分出胜负后棋盘上会叠一层结算浮层，上面有「再来一局」和「离开」。
+18×18 棋盘，黑棋先行，横竖斜任意方向连成 5 子获胜，下满算平局。开始界面选执黑先手
+还是执白后手，再选 1~4 级难度。对局中点交叉点落子，右侧「悔棋」回退你和 AI 各一步，
+每局 3 次，快捷键 `U` 悔棋、`Esc` 返回主菜单。分出胜负后棋盘上会叠一层结算浮层，
+上面有「再来一局」和「离开」。
 
 ### 难度
 
@@ -165,10 +144,10 @@ AI 侧权重 10、玩家侧权重 80，所以 AI 偏防守。在这之上加了�
 
 ## 一些实现上的选择
 
-**JSON 库为什么直接塞进仓库**。用的是 nlohmann/json 3.11.3，单头文件放在
+**JSON 库直接塞进仓库**。用的是 nlohmann/json 3.11.3，单头文件放在
 `cpp/third_party/json.hpp`，CMake 里只是加了个 include path。需求里给的方案是
 CMake FetchContent，但那个要求 configure 阶段能连上 GitHub，离线机器和内网 CI
-上会直接构建失败。想换成 FetchContent 的话，删掉那个头文件，在 `CMakeLists.txt` 里加上：
+上会直接构建失败。想换回去的话，删掉那个头文件，在 `CMakeLists.txt` 里加上：
 
 ```cmake
 include(FetchContent)
@@ -178,20 +157,12 @@ FetchContent_MakeAvailable(json)
 target_link_libraries(gomoku_server PRIVATE nlohmann_json::nlohmann_json)
 ```
 
-代码里统一用 `json = nlohmann::json` 这个别名。消息里字段类型不对时 nlohmann 会抛
-`json::exception`，`tcp_server.cpp` 的 `dispatch()` 用一个 try 兜成 `error` 消息，
-连接不会被打断。
+**服务端**。每个连接开一个线程，线程里各有一份独立的 `Game`，多个客户端能同时开局。
+收尾先 `shutdown()` 再 `close()`——只有 `shutdown()` 能唤醒另一个线程里阻塞的 `recv()`，
+不然退出时会卡在那儿。
 
-**服务端**。每个连接开一个 `std::thread` 并 detach，线程里各有一份独立的 `Game`，
-所以多个客户端能同时开局互不干扰。主循环用带 500 ms 超时的 `select` 等新连接，
-`stop()` 半秒内就能生效。`Ctrl+C` 的处理函数只置一个原子标志，不在信号上下文里加锁或做 IO。
-收尾时先 `shutdown()` 再 `close()`——只有 `shutdown()` 能唤醒**另一个线程**里阻塞的
-`recv()`，不然退出时会一直卡在那儿。
-
-**客户端**。收数据在独立线程里做，解析好的消息塞进 `queue.Queue`，主线程渲染循环用
-`poll()` 非阻塞地取，所以 AI 思考时界面照常刷新。断线、服务端崩溃、收到无法解析的数据，
-都会包装成一条消息交给界面弹提示，而不是抛异常崩掉。点棋盘后先本地乐观落子再发消息，
-界面零延迟；万一这手被服务端判非法，界面会主动拉一次 `state` 把棋盘同步回权威状态。
+**客户端**。收数据在独立线程，解析好的消息塞进 `queue.Queue`，渲染循环用 `poll()` 取，
+所以 AI 思考时界面照常刷新。断线一类的异常都包装成消息交给界面弹提示，不往渲染循环里抛。
 
 ### 和原始版本的差异
 
@@ -206,27 +177,15 @@ target_link_libraries(gomoku_server PRIVATE nlohmann_json::nlohmann_json)
 
 ## 常见问题
 
-**找不到服务端可执行文件** —— 按提示先编译 C++ 部分，或者用环境变量指定路径：
+**找不到服务端可执行文件** —— 先编译 C++ 部分，或者用 `GOMOKU_SERVER_EXE` 指定路径。
 
-```bash
-export GOMOKU_SERVER_EXE=/path/to/gomoku_server
-```
+**端口被占用** —— 默认会顺着 8888 往后找；想指定就改 `python/config.py` 里的 `PORT`，
+或者启动时加 `--port`。
 
-**端口被占用 / 想换端口** —— 默认会自己顺着 8888 往后找，实在想指定就改
-`python/config.py` 里的 `PORT`，或者启动时加 `--port`。
+**汉字显示成方块** —— pygame 不带中文字体，程序会自动在系统里找。都没有的话装一个
+CJK 字体包，比如 `sudo apt install fonts-noto-cjk`。Windows 和 macOS 自带。
 
-**界面上的汉字显示成方块** —— pygame 不带中文字体，程序会自动在系统里找
-（Noto Sans CJK / 微软雅黑 / PingFang / 文泉驿等）。都没有的话装一款：
+**AI 在难度 4 下卡很久** —— 3 秒是上限，这期间界面不会卡，会显示「AI正在思考中…」。
+嫌慢就降难度，或者改 `cpp/src/ai.cpp` 里的 `timeBudgetMs()`。
 
-```bash
-sudo apt install fonts-noto-cjk              # Debian / Ubuntu
-sudo dnf install google-noto-sans-cjk-fonts   # Fedora
-sudo pacman -S noto-fonts-cjk                 # Arch
-```
-
-Windows 和 macOS 系统自带中文字体，不用额外装。
-
-**AI 在难度 4 下思考很久** —— 3 秒是设定的上限。这期间界面不会卡，会显示
-「AI正在思考中…」并继续刷新。嫌慢就降难度，或者改 `cpp/src/ai.cpp` 里的 `timeBudgetMs()`。
-
-**报 `缺少依赖：No module named 'pygame'`** —— `pip install -r python/requirements.txt`。
+**报 `No module named 'pygame'`** —— `pip install -r python/requirements.txt`。

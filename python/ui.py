@@ -235,8 +235,7 @@ class GomokuApp:
             self._fatal(str(exc))
             return
 
-        # 先本地落子，界面立刻响应，不等一个网络来回。服务端回的 state 会覆盖棋盘；
-        # 万一这手被判非法，_show_error 会再拉一次 state 同步回来
+        # 先本地落子，界面立刻响应，不等一个网络来回；服务端回的 state 会覆盖棋盘
         self.board[y][x] = self.human_player
         self.last_move = (x, y)
         self.thinking = True
@@ -308,8 +307,7 @@ class GomokuApp:
             self.thinking_started = self.time
 
     def _show_error(self, text):
-        # 弹一条几秒后消失的提示，顺手找服务端要一次 state ——
-        # 本地可能已经乐观地画了棋子，得拿服务端的棋盘覆盖回来
+        # 弹个几秒后消失的提示，顺便拉一次 state —— 本地可能已经乐观地画了棋子
         self.transient_error = text
         self.transient_until = self.time + 4.0
         self.thinking = False

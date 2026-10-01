@@ -1,5 +1,4 @@
 //棋盘状态机，只管规则，不管网络也不管界面
-//坐标 x 是列、y 是行，存成 cells_[y][x]
 #pragma once
 
 #include <string>
